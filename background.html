@@ -1,117 +1,14 @@
 <html>
     <head>
+        <script type="text/javascript" src="application.js"></script>
         <script type="text/javascript">
-
-            const API_URL    = 'http://www.netvibes.com/api';
-            const HOME_URL   = 'http://www.netvibes.com/privatepage/1';
-            const SIGNIN_URL = 'http://www.netvibes.com/signin';
-
-            var feeds = new Array();
-            var logged = true;
-
-            function getFeeds() {
-                // TODO: works with multipages and multiple feeds
-                var xhr = new XMLHttpRequest();
-                xhr.open('GET', API_URL + '/my/account/export?format=json', true);
-                xhr.onreadystatechange = function() {
-                    if (xhr.readyState == 4) {
-                        logged = true;
-                        switch (xhr.status) {
-                            case 200:
-                                var json = JSON.parse(xhr.responseText);
-                                feeds = new Array();
-                                for (i in json.tabs) {
-                                    var tab = json.tabs[i];
-                                    for (j in tab.widgets) {
-                                        var widget = tab.widgets[j];
-                                        switch (widget.name) {
-                                            case 'RssReader':
-                                                feeds.push(widget.data.feedId);
-                                                break;
-                                        }
-                                    }
-                                }
-                                getUnreadCount();
-                                break;
-                            case 403:
-                                forbidden();
-                                break;
-                        }
-                    }
-                }
-                xhr.send();
-            }
-
-            function getUnreadCount() {
-                if (feeds.length > 0) {
-                    var xhr = new XMLHttpRequest();
-                    xhr.open('GET', API_URL + '/feeds/info?format=json&feeds=' + feeds.join(','), true);
-                    xhr.onreadystatechange = function() {
-                        if (xhr.readyState == 4) {
-                            logged = true;
-                            switch (xhr.status) {
-                                case 200:
-                                    var json = JSON.parse(xhr.responseText);
-                                    updateUnreadCount(json.unread_count);
-                                    break;
-                                case 403:
-                                    forbidden();
-                                    break;
-                            }
-                        }
-                    }
-                    xhr.send();
-                }
-            }
-
-            function updateUnreadCount(unread_count) {
-                var icon = (parseInt(unread_count) > 0) ? 'icon.png' : 'disabled.png';
-                if (unread_count == 0) {
-                    unread_count = '';
-                }
-                chrome.browserAction.setBadgeText({text: unread_count.toString()});
-                chrome.browserAction.setIcon({path: icon});
-            }
-
-            function refresh() {
-                getFeeds();
-            }
-
-            function init() {
-                refresh();
-                setInterval('getFeeds()', 20 * 60 * 1000);
-                setInterval('getUnreadCount()', 2 * 60 * 1000);
-            }
-
-            function forbidden() {
-                logged = false;
-                updateUnreadCount('!');
-            }
-
-            function openTab() {
-                chrome.tabs.getAllInWindow(null, function(tabs) {
-                    url = logged ? HOME_URL : SIGNIN_URL;
-                    for (i in tabs) {
-                        var tab = tabs[i];
-                        if (tab.url.match(/http:\/\/www.netvibes.com\/([a-z]{2}$|signin|signup|privatepage\/1)/)) {
-                            var data = {selected: true };
-                            if (tab.url != url) {
-                                data.url = url;
-                            }
-                            chrome.tabs.update(tab.id, data);
-                            return;
-                        }
-                    }
-                    chrome.tabs.create({selected: true, url: url});
-                });
-            }
-
             chrome.browserAction.onClicked.addListener(function() {
                 refresh();
                 openTab();
             });
-            init();
-
+            getDashboards('background');
+            setInterval('getFeeds()', 20 * 60 * 1000);
+            setInterval('getUnreadCount()', 2 * 60 * 1000);
         </script>
     </head>
 </html>
