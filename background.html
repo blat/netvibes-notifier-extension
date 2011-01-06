@@ -1,12 +1,14 @@
 <html>
     <head>
+        <title>Netvibes Notifier for Google Chrome</title>
+        <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.4/jquery.min.js"></script>
         <script type="text/javascript" src="application.js"></script>
         <script type="text/javascript">
             chrome.browserAction.onClicked.addListener(function() {
                 refresh();
                 openTab();
             });
-            getDashboards('background');
+            getDashboards(getFeeds);
             setInterval('getFeeds()', 20 * 60 * 1000);
             setInterval('getUnreadCount()', 2 * 60 * 1000);
         </script>

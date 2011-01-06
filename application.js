@@ -3,221 +3,200 @@ const PW_URL     = 'http://www.netvibes.com/modules/multipleFeeds/providers';
 const HOME_URL   = 'http://www.netvibes.com';
 const SIGNIN_URL = 'http://www.netvibes.com/signin';
 
+/**
+ * List of private and non-branded dashboards.
+ */
 var dashboards = new Array();
+
+/**
+ * List of feed IDs in the selected dashboard.
+ */
 var feeds = new Array();
+
+/**
+ * List of module IDs (= secure feeds in the selected dashboard).
+ */
 var modules = new Array();
-var filter = false;
-var home_url = HOME_URL;
-var api_url = API_URL;
+
+/**
+ * Number of ajax requests in progress.
+ * Use to get unread count only when all data is loaded (= all URLs converted in feed ID).
+ */
 var waiting = 0;
 
-// Issue #1: Wrong feed ID for some multiple feeds
-// Issue #2: Cookies not setted on brand.netvibesbusiness.com || Filters don't work on netvibes.com
-
-function getDashboards(from) {
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', API_URL + '/my/dashboards?format=json', true);
-    xhr.onreadystatechange = function() {
-        if (xhr.readyState == 4) {
-            switch (xhr.status) {
-                case 200:
-                    var json = JSON.parse(xhr.responseText);
-                    dashboards = new Array();
-                    for (var id in json.dashboards) {
-                        var dashboard = json.dashboards[id];
-                        if (dashboard.access != 'public') {
-                            dashboards.push({
-                                id: id,
-                                title: dashboard.title,
-                                name: dashboard.name,
-                                brand: dashboard.brand
-                            });
-                        }
-                    }
-
-                    switch (from) {
-                        case 'background':
-                            getFeeds();
-                            break;
-                        case 'options':
-                            buildForm();
-                            break;
-                    }
-                    break;
-                case 403:
-                    forbidden();
-                    break;
+/**
+ * Get list of private dashboards.
+ * Skip branded dashboards
+ * because we don't know theirs URLs
+ * and cookies are not setted on brand.netvibesbusinnes.com
+ * and filters don't work on www.netvibes.com,
+ * so if tagging is enabled, unread counter is wrong!
+ *
+ * @return void
+ */
+function getDashboards(callback) {
+    $.getJSON(API_URL + '/my/dashboards', {format: 'json'}, function(data) {
+        dashboards = new Array();
+        $.each(data.dashboards, function(id, dashboard) {
+            if (dashboard.access != 'public' && !dashboard.brand) {
+                dashboards.push({
+                    id: id,
+                    title: dashboard.title,
+                    name: dashboard.name
+                });
             }
-        }
-    }
-    xhr.send();
+        });
+        callback();
+    });
 }
 
-function getFeeds() {
+/**
+ * Get selected dashboard ID.
+ * If local storage is empty or invalid (ID doesn't exist),
+ * select the first dashboard.
+ *
+ * @return integer
+ */
+function getSelectedDashboard() {
     var i = 0;
     if (typeof localStorage['dashboard'] != 'undefined') {
-        for (i = 0; i < dashboards.length; i++) {
-            if (dashboards[i].id == localStorage['dashboard']) {
-                break;
+        $.each(dashboards, function(j, dashboard) {
+            if (dashboard.id == localStorage['dashboard']) {
+                i = j;
             }
-        }
+        });
     }
-    var dashboard = dashboards[i];
-    localStorage['dashboard'] = dashboard.id;
-    home_url = HOME_URL + '/privatepage/' + dashboard.name;
-    api_url = (dashboard.brand && filter) ? 'http://' + dashboard.brand + '.netvibesbusiness.com/api' : API_URL;
-
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', API_URL + '/my/widgets/' + dashboard.id + '?format=json', true);
-    xhr.onreadystatechange = function() {
-        if (xhr.readyState == 4) {
-            switch (xhr.status) {
-                case 200:
-                    var json = JSON.parse(xhr.responseText);
-                    feeds = new Array();
-                    modules = new Array();
-                    var urls = new Array();
-                    filter = false;
-                    for (var i = 0; i < json.widgets.length; i++) {
-                        var widget = json.widgets[i];
-                        switch (widget.name) {
-                            case 'RssReader':
-                                if (typeof(widget.data.feedUrl) != 'undefined' && widget.data.feedUrl.match(/^https?:\/\/\w+@/)) { // secure feed
-                                    modules.push(widget.id);
-                                } else {
-                                    if (typeof(widget.data.feedId) != 'undefined') {
-                                        feeds.push(widget.data.feedId);
-                                    } else {
-                                        urls.push(encodeURIComponent(widget.data.feedUrl));
-                                    }
-                                }
-                                break;
-                            case 'MultipleFeeds':
-                                switch (widget.data.provider) {
-                                    case 'custom': // miso
-                                        var url = widget.data.url + '/default.js';
-                                        break;
-                                    default: // pw
-                                        var url = PW_URL + '/' + widget.data.provider + '/' + widget.data.category + '.js';
-                                        break;
-                                }
-                                if (typeof widget.data['list_' + widget.data.category] != 'undefined') {
-                                    var list = widget.data['list_' + widget.data.category].split(',');
-                                } else {
-                                    var list = false;
-                                }
-                                getMultipleFeeds(url, list);
-                                break;
-                            case 'SmartTagged': // filter
-                                filter = true;
-                                feeds.push(widget.data.feedId);
-                                break;
-                        }
-                    }
-                    if (urls.length > 0) getFeedIds(urls);
-                    else getUnreadCount();
-                    break;
-                case 403:
-                    forbidden();
-                    break;
-            }
-        }
-    }
-    xhr.send();
+    var current = dashboards[i];
+    localStorage['dashboard'] = current.id;
+    return current;
 }
 
+/**
+ * Get feeds identified by:
+ * - config URL if multiple feeds (miso or PW)
+ * - module ID if url contains a login (= secure feed)
+ * - ID when it's possible, else url.
+ *
+ * @return void
+ */
+function getFeeds() {
+    $.getJSON(API_URL + '/my/widgets/' + getSelectedDashboard().id, {format: 'json'}, function(data) {
+        feeds = new Array();
+        modules = new Array();
+        var urls = new Array();
+        $.each(data.widgets, function(i, widget) {
+            switch (widget.name) {
+                case 'RssReader':
+                    // If there is a login in the URL, it's a secure feed.
+                    // Need the module ID instead of the feed ID.
+                    if (widget.data.feedUrl && widget.data.feedUrl.match(/^https?:\/\/\w+@/)) {
+                        modules.push(widget.id);
+                    } else { // Else, get the ID or the URL.
+                        if (widget.data.feedId) {
+                            feeds.push(widget.data.feedId);
+                        } else {
+                            urls.push(encodeURIComponent(widget.data.feedUrl));
+                        }
+                    }
+                    break;
+                case 'MultipleFeeds':
+                    switch (widget.data.provider) {
+                        case 'custom':
+                            var url = widget.data.url + '/default.js'; // Miso: config URL is in data
+                            break;
+                        default:
+                            var url = PW_URL + '/' + widget.data.provider + '/' + widget.data.category + '.js'; // PW: build the config URL with provider and category
+                            break;
+                    }
+                    var list = widget.data['list_' + widget.data.category] ? widget.data['list_' + widget.data.category].split(',') : false; // List of selected tabs
+                    getMultipleFeeds(url, list);
+                    break;
+                /* Doesn't work because need to know the base url of premium dashboard
+                case 'SmartTagged':
+                    feeds.push(widget.data.feedId);
+                    break;
+                */
+            }
+        });
+        if (urls.length > 0) getFeedIds(urls);
+        else getUnreadCount();
+    });
+}
+
+/**
+ * Get URLs of feeds contains in a multiple feeds.
+ *
+ * @param string url The url of config file
+ * @param array list List of feeds enabled in the multiple feeds
+ *
+ * @return void
+ */
 function getMultipleFeeds(url, list) {
     waiting++;
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', url, true);
-    xhr.onreadystatechange = function() {
-        if (xhr.readyState == 4) {
-            switch (xhr.status) {
-                case 200:
-                    var json = JSON.parse(xhr.responseText);
-                    var urls = new Array();
-                    for (var i = 0; i < json.length; i++) {
-                        var feed = json[i];
-                        if (list == false) {
-                            urls.push(feed.url);
-                        } else {
-                            for (var j = 0; j < list.length; j++) {
-                                var id = list[j];
-                                if (id == feed.id) {
-                                    urls.push(encodeURIComponent(feed.url));
-                                }
-                            }
-                        }
-                    }
-                    waiting--;
-                    getFeedIds(urls);
-                    break;
+    $.getJSON(url, function(data) {
+        var urls = new Array();
+        $.each(data, function(url, feed) {
+            if (!list || list.indexOf(feed.id.toString()) >= 0) {
+                urls.push(feed.url);
             }
-        }
-    }
-    xhr.send();
+        });
+        waiting--;
+        getFeedIds(urls);
+    });
 }
 
+/**
+ * Convert URLs into feed IDs.
+ *
+ * @params array urls List of URLs
+ *
+ * @return void
+ */
 function getFeedIds(urls) {
     waiting++;
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', api_url + '/feeds/add?format=json&url[]=' + urls.join('&url[]='), true);
-    xhr.onreadystatechange = function() {
-        if (xhr.readyState == 4) {
-            switch (xhr.status) {
-                case 200:
-                    var json = JSON.parse(xhr.responseText);
-                    for (var url in json.feeds) {
-                        feeds.push(json.feeds[url]);
-                    }
-                    waiting--;
-                    getUnreadCount();
-                    break;
-                }
-        }
-    }
-    xhr.send();
+    $.getJSON(API_URL + '/feeds/add', {format: 'json', url: urls}, function(data) {
+        $.each(data.feeds, function(url, id) {
+            feeds.push(id);
+        });
+        waiting--;
+        getUnreadCount();
+    });
 }
 
+/**
+ * Get unread count from list of feed IDs and/or module IDs.
+ *
+ * @return void
+ */
 function getUnreadCount() {
     if (waiting == 0) {
         if (feeds.length == 0 && modules.length == 0) {
             updateUnreadCount(0);
         } else {
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', api_url + '/feeds/info?format=json&feeds=' + feeds.join(',') + '&modules=' + modules.join(','), true);
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState == 4) {
-                    switch (xhr.status) {
-                        case 200:
-                            var json = JSON.parse(xhr.responseText);
-                            var duplicate = false;
-                            for (var i = 0; i < json.feeds.length; i++) {
-                                var feed = json.feeds[i];
-                                if (feed.is_duplicate) {
-                                    for (var j = 0; j < feeds.length; j++) {
-                                        if (feeds[j] == feed.id) {
-                                            feeds[j] = feed.is_duplicate;
-                                            duplicate = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                            if (duplicate) getUnreadCount();
-                            else updateUnreadCount(json.unread_count);
-                            break;
-                        case 403:
-                            forbidden();
-                            break;
+            $.getJSON(API_URL + '/feeds/info', {format: 'json', feeds: feeds.join(','), modules: modules.join(',')}, function(data) {
+                var duplicate = false;
+                $.each(data.feeds, function(i, feed) {
+                    if (feed.is_duplicate) {
+                        var j = feeds.indexOf(feed.id);
+                        feeds[j] = feed.is_duplicate;
+                        duplicate = true;
                     }
-                }
-            }
-            xhr.send();
+                });
+                if (duplicate) getUnreadCount();
+                else updateUnreadCount(data.unread_count);
+            });
         }
     }
 }
 
+/**
+ * Update unread count.
+ * If this count is equal to 0 (= nothing to read),
+ * we set black&white icon,
+ * else classic Netvibes icon.
+ *
+ * @params int unread_count Unread count
+ */
 function updateUnreadCount(unread_count) {
     var icon = (parseInt(unread_count) > 0) ? 'icon.png' : 'disabled.png';
     if (unread_count == 0) {
@@ -227,47 +206,76 @@ function updateUnreadCount(unread_count) {
     chrome.browserAction.setIcon({path: icon});
 }
 
+/**
+ * Refresh data.
+ * Only feeds, modules and unread count. Not dashboards.
+ *
+ * @return void
+ */
 function refresh() {
     waiting = 0;
     getFeeds();
 }
 
-function forbidden() {
-    home_url = SIGNIN_URL;
-    updateUnreadCount('!');
-}
-
+/**
+ * Show the selected Netvibes dashboard.
+ * If a tab is already open on Netvibes (welcome page, private dashboard or sign-in/up), use it!
+ * Else, open a new tab.
+ *
+ * @return void
+ */
 function openTab() {
-    chrome.tabs.create({selected: true, url: home_url});
+    chrome.tabs.getAllInWindow(null, function(tabs) {
+        var founded = false;
+        var url = HOME_URL + '/privatepage/' + getSelectedDashboard().name;
+        $.each(tabs, function(i, tab) {
+            if (!founded && tab.url.match('http://www.netvibes.com/([a-z]{2}$|signin|signup|privatepage/' + getSelectedDashboard().name + ')')) {
+                founded = true;
+                var data = {selected: true };
+                if (!tab.url.match('^' + url)) {
+                    data.url = url;
+                }
+                chrome.tabs.update(tab.id, data);
+            }
+        });
+        if (!founded) chrome.tabs.create({selected: true, url: url});
+    });
 }
 
+/**
+ * Build options form.
+ * This form show list of private and non-branded dashboards
+ * and user can choose a dashboard to follow (= see notification).
+ *
+ * @return void
+ */
 function buildForm() {
-    document.write('<h1>Netvibes Notifier for Google Chrome</h1>');
-    var current = localStorage['dashboard'];
-    document.write('<h3>Select your dashboard:</h3>');
-    for (var i = 0; i < dashboards.length; i++) {
-        var dashboard = dashboards[i];
-        if (dashboard.access != 'public') {
-            document.write('<input type="radio" id="' + dashboard.id + '" value="' + dashboard.id + '" name="dashboard" ' + (dashboard.id == current ? 'checked="checked"' : '') + '/>');
-            document.write('<label for="' + dashboard.id + '">' + dashboard.title + '</label>');
-            document.write('<br/>');
-        }
-    }
-    document.write('<p><button id="button" onclick="saveForm()">Save</button></p>');
+    var wrapper = $('#wrapper').empty()
+        .append($('<h1>').text('Netvibes Notifier'))
+        .append($('<h3>').text('Select your dashboard:'));
+    $.each(dashboards, function(i, dashboard) {
+        wrapper.append(
+            $('<input>', {type: 'radio', id: 'dashboard-' + dashboard.id, value: dashboard.id, name: 'dashboard', checked: (dashboard.id == getSelectedDashboard().id ? 'checked' : '')})
+        ).append(
+            $('<label>', {for: 'dashboard-' + dashboard.id}).text(dashboard.title)
+        ).append('<br>');
+    });
+    wrapper.append($('<p>').append(
+        $('<button>', {id: 'save-button'}).text('Save').click(saveForm)
+    ));
 }
 
+/**
+ * Save options form.
+ * Set the choosen dashboard into local storage.
+ *
+ * @return void
+ */
 function saveForm() {
-    var button = document.getElementsByTagName('button')[0];
-    button.innerHTML = 'In progress...';
-    button.disabled = true;
-    var radio = document.getElementsByName('dashboard');
-    for (var i = 0; i < radio.length; i++) {
-        if (radio[i].checked) {
-            localStorage['dashboard'] = radio[i].value;
-        }
-    }
-    button.innerHTML = 'Saved!';
-    button.disabled = false;
+    var button = $('#save-button')
+        .attr({disabled: 'disabled'}).text('In progress...');
+    localStorage['dashboard'] = $('input[type=radio][name=dashboard]:checked')[0].value;
+    button.attr({disabled: ''}).text('Saved!');
     refresh();
     return false;
 }
