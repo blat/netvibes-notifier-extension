@@ -1,7 +1,6 @@
 const API_URL    = 'http://www.netvibes.com/api';
 const PW_URL     = 'http://www.netvibes.com/modules/multipleFeeds/providers';
 const HOME_URL   = 'http://www.netvibes.com';
-const SIGNIN_URL = 'http://www.netvibes.com/signin';
 
 /**
  * List of private and non-branded dashboards.
