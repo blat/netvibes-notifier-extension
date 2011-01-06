@@ -12,8 +12,7 @@
     "options_page": "options.html",
     "permissions": [
         "tabs",
-        "http://*.netvibes.com/",
-        "http://*.netvibesbusiness.com/"
+        "http://*.netvibes.com/"
     ],
     "browser_action": {
         "default_title": "",
