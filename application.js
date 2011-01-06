@@ -250,6 +250,7 @@ function openTab() {
  */
 function buildForm() {
     var wrapper = $('#wrapper').empty()
+        .append($('<img>', {src: 'icon.png'}))
         .append($('<h1>').text('Netvibes Notifier'))
         .append($('<h3>').text('Select your dashboard:'));
     $.each(dashboards, function(i, dashboard) {
@@ -257,11 +258,11 @@ function buildForm() {
             $('<input>', {type: 'radio', id: 'dashboard-' + dashboard.id, value: dashboard.id, name: 'dashboard', checked: (dashboard.id == getSelectedDashboard().id ? 'checked' : '')})
         ).append(
             $('<label>', {for: 'dashboard-' + dashboard.id}).text(dashboard.title)
-        ).append('<br>');
+        );
     });
-    wrapper.append($('<p>').append(
+    wrapper.append(
         $('<button>', {id: 'save-button'}).text('Save').click(saveForm)
-    ));
+    );
 }
 
 /**
