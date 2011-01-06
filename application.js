@@ -50,11 +50,11 @@ function getDashboards(callback) {
 }
 
 /**
- * Get selected dashboard ID.
+ * Get selected dashboard.
  * If local storage is empty or invalid (ID doesn't exist),
  * select the first dashboard.
  *
- * @return integer
+ * @return object
  */
 function getSelectedDashboard() {
     var i = 0;
