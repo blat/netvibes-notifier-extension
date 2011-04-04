@@ -18,12 +18,6 @@ var feeds = new Array();
 var modules = new Array();
 
 /**
- * Number of ajax requests in progress.
- * Use to get unread count only when all data is loaded (= all URLs converted in feed ID).
- */
-var waiting = 0;
-
-/**
  * Get list of private dashboards.
  * Skip branded dashboards
  * because we don't know theirs URLs
@@ -33,8 +27,8 @@ var waiting = 0;
  *
  * @return void
  */
-function getDashboards(callback) {
-    $.getJSON(API_URL + '/my/dashboards', {format: 'json'}, function(data) {
+function getDashboards(callback_success, callback_error) {
+    $.getJSON(API_URL + '/my/dashboards', function(data) {
         dashboards = new Array();
         $.each(data.dashboards, function(id, dashboard) {
             if (dashboard.access != 'public' && !dashboard.brand) {
@@ -45,8 +39,9 @@ function getDashboards(callback) {
                 });
             }
         });
-        callback();
-    });
+    })
+    .success(function() { callback_success(); })
+    .error(function() { callback_error(); });
 }
 
 /**
@@ -57,6 +52,9 @@ function getDashboards(callback) {
  * @return object
  */
 function getSelectedDashboard() {
+    if (dashboards.length == 0) {
+        return false;
+    }
     var i = 0;
     if (typeof localStorage['dashboard'] != 'undefined') {
         $.each(dashboards, function(j, dashboard) {
@@ -79,7 +77,9 @@ function getSelectedDashboard() {
  * @return void
  */
 function getFeeds() {
-    $.getJSON(API_URL + '/my/widgets/' + getSelectedDashboard().id, {format: 'json'}, function(data) {
+    var dashboard = getSelectedDashboard();
+    if (dashboard == false) return;
+    $.getJSON(API_URL + '/my/widgets/' + dashboard.id, function(data) {
         feeds = new Array();
         modules = new Array();
         var urls = new Array();
@@ -90,25 +90,17 @@ function getFeeds() {
                     // Need the module ID instead of the feed ID.
                     if (widget.data.feedUrl && widget.data.feedUrl.match(/^https?:\/\/\w+@/)) {
                         modules.push(widget.id);
-                    } else { // Else, get the ID or the URL.
-                        if (widget.data.feedId) {
-                            feeds.push(widget.data.feedId);
-                        } else {
-                            urls.push(encodeURIComponent(widget.data.feedUrl));
-                        }
+                    } else {
+                        feeds.push(widget.data.feedId);
                     }
                     break;
                 case 'MultipleFeeds':
-                    switch (widget.data.provider) {
-                        case 'custom':
-                            var url = widget.data.url + '/default.js'; // Miso: config URL is in data
-                            break;
-                        default:
-                            var url = PW_URL + '/' + widget.data.provider + '/' + widget.data.category + '.js'; // PW: build the config URL with provider and category
-                            break;
-                    }
                     var list = widget.data['list_' + widget.data.category] ? widget.data['list_' + widget.data.category].split(',') : false; // List of selected tabs
-                    getMultipleFeeds(url, list);
+                    $.each(widget.feeds, function(i, feed) {
+                        if (!list || list.indexOf(feed.id.toString()) >= 0) {
+                            feeds.push(feed.feedId);
+                        }
+                    });
                     break;
                 /* Doesn't work because need to know the base url of premium dashboard
                 case 'SmartTagged':
@@ -117,47 +109,6 @@ function getFeeds() {
                 */
             }
         });
-        if (urls.length > 0) getFeedIds(urls);
-        else getUnreadCount();
-    });
-}
-
-/**
- * Get URLs of feeds contains in a multiple feeds.
- *
- * @param string url The url of config file
- * @param array list List of feeds enabled in the multiple feeds
- *
- * @return void
- */
-function getMultipleFeeds(url, list) {
-    waiting++;
-    $.getJSON(url, function(data) {
-        var urls = new Array();
-        $.each(data, function(url, feed) {
-            if (!list || list.indexOf(feed.id.toString()) >= 0) {
-                urls.push(feed.url);
-            }
-        });
-        waiting--;
-        getFeedIds(urls);
-    });
-}
-
-/**
- * Convert URLs into feed IDs.
- *
- * @params array urls List of URLs
- *
- * @return void
- */
-function getFeedIds(urls) {
-    waiting++;
-    $.getJSON(API_URL + '/feeds/add', {format: 'json', url: urls}, function(data) {
-        $.each(data.feeds, function(url, id) {
-            feeds.push(id);
-        });
-        waiting--;
         getUnreadCount();
     });
 }
@@ -168,23 +119,23 @@ function getFeedIds(urls) {
  * @return void
  */
 function getUnreadCount() {
-    if (waiting == 0) {
-        if (feeds.length == 0 && modules.length == 0) {
-            updateUnreadCount(0);
-        } else {
-            $.getJSON(API_URL + '/feeds/info', {format: 'json', feeds: feeds.join(','), modules: modules.join(',')}, function(data) {
-                var duplicate = false;
-                $.each(data.feeds, function(i, feed) {
-                    if (feed.is_duplicate) {
-                        var j = feeds.indexOf(feed.id);
-                        feeds[j] = feed.is_duplicate;
-                        duplicate = true;
-                    }
-                });
-                if (duplicate) getUnreadCount();
-                else updateUnreadCount(data.unread_count);
+    if (getSelectedDashboard() == false) {
+        error();
+    } else if (feeds.length == 0 && modules.length == 0) {
+        updateUnreadCount(0);
+    } else {
+        $.getJSON(API_URL + '/feeds/info', {feeds: feeds.join(','), modules: modules.join(',')}, function(data) {
+            var duplicate = false;
+            $.each(data.feeds, function(i, feed) {
+                if (feed.is_duplicate) {
+                    var j = feeds.indexOf(feed.id);
+                    feeds[j] = feed.is_duplicate;
+                    duplicate = true;
+                }
             });
-        }
+            if (duplicate) getUnreadCount();
+            else updateUnreadCount(data.unread_count);
+        });
     }
 }
 
@@ -206,13 +157,21 @@ function updateUnreadCount(unread_count) {
 }
 
 /**
+ * Reset all data.
+ *
+ * @return void
+ */
+function reset() {
+    getDashboards(getFeeds, error);
+}
+
+/**
  * Refresh data.
  * Only feeds, modules and unread count. Not dashboards.
  *
  * @return void
  */
 function refresh() {
-    waiting = 0;
     getFeeds();
 }
 
@@ -224,11 +183,12 @@ function refresh() {
  * @return void
  */
 function openTab() {
+    var dashboard = getSelectedDashboard();
+    var url = HOME_URL + ((dashboard == false) ? '/signin' : '/privatepage/' + dashboard.name);
     chrome.tabs.getAllInWindow(null, function(tabs) {
         var founded = false;
-        var url = HOME_URL + '/privatepage/' + getSelectedDashboard().name;
         $.each(tabs, function(i, tab) {
-            if (!founded && tab.url.match('http://www.netvibes.com/([a-z]{2}$|signin|signup|privatepage/' + getSelectedDashboard().name + ')')) {
+            if (!founded && tab.url.match('http://www.netvibes.com/([a-z]{2}$|signin|signup|privatepage/' + (dashboard.name || '')+ ')')) {
                 founded = true;
                 var data = {selected: true };
                 if (!tab.url.match('^' + url)) {
@@ -242,40 +202,13 @@ function openTab() {
 }
 
 /**
- * Build options form.
- * This form show list of private and non-branded dashboards
- * and user can choose a dashboard to follow (= see notification).
+ * Update notification to show an error occured
  *
  * @return void
  */
-function buildForm() {
-    var wrapper = $('#wrapper').empty()
-        .append($('<img>', {src: 'icon.png'}))
-        .append($('<h1>').text('Netvibes Notifier'))
-        .append($('<h3>').text('Select your dashboard:'));
-    $.each(dashboards, function(i, dashboard) {
-        wrapper.append(
-            $('<input>', {type: 'radio', id: 'dashboard-' + dashboard.id, value: dashboard.id, name: 'dashboard', checked: (dashboard.id == getSelectedDashboard().id ? 'checked' : '')})
-        ).append(
-            $('<label>', {for: 'dashboard-' + dashboard.id}).text(dashboard.title)
-        );
-    });
-    wrapper.append(
-        $('<button>', {id: 'save-button'}).text('Save').click(saveForm)
-    );
+function error() {
+    var icon = 'disabled.png';
+    chrome.browserAction.setBadgeText({text: '?'});
+    chrome.browserAction.setIcon({path: icon});
 }
 
-/**
- * Save options form.
- * Set the choosen dashboard into local storage.
- *
- * @return void
- */
-function saveForm() {
-    var button = $('#save-button')
-        .attr({disabled: 'disabled'}).text('In progress...');
-    localStorage['dashboard'] = $('input[type=radio][name=dashboard]:checked')[0].value;
-    button.attr({disabled: ''}).text('Saved!');
-    refresh();
-    return false;
-}

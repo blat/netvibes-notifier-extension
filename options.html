@@ -1,10 +1,44 @@
 <html>
     <head>
         <title>Netvibes Notifier for Google Chrome</title>
-        <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.4/jquery.min.js"></script>
+        <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.5/jquery.min.js"></script>
         <script type="text/javascript" src="application.js"></script>
         <script type="text/javascript">
-            getDashboards(buildForm);
+
+            function buildForm() {
+                var wrapper = $('#wrapper').empty().append($('<h3>').text('Select your dashboard:'));
+                $.each(dashboards, function(i, dashboard) {
+                    wrapper.append(
+                        $('<input>', {type: 'radio', id: 'dashboard-' + dashboard.id, value: dashboard.id, name: 'dashboard', checked: (getSelectedDashboard() != false && dashboard.id == getSelectedDashboard().id ? 'checked' : '')})
+                    ).append(
+                        $('<label>', {for: 'dashboard-' + dashboard.id}).text(dashboard.title)
+                    );
+                });
+                wrapper.append(
+                    $('<button>', {id: 'save-button'}).text('Save').click(saveForm)
+                );
+            }
+
+            function saveForm() {
+                var button = $('#save-button')
+                    .attr({disabled: 'disabled'}).text('In progress...');
+                localStorage['dashboard'] = $('input[type=radio][name=dashboard]:checked')[0].value;
+                button.attr({disabled: ''}).text('Saved!');
+                refresh();
+                return false;
+            }
+
+            function signIn() {
+                $('#wrapper').empty().append($('<p>').html('<strong>Error:</strong> You have to <a href="' + HOME_URL + '/signin">sign-in</a> before.'));
+            }
+
+            function init() {
+                getDashboards(buildForm, signIn);
+            }
+
+            $(function() {
+                init();
+            });
         </script>
         <style>
             body {
@@ -29,6 +63,12 @@
                 padding: 8px 0;
                 margin: 8px;
             }
+            p {
+                margin-left: 8px;
+            }
+            a {
+                color: #fff;
+            }
             input {
                 display: block;
                 margin-left: 8px;
@@ -46,6 +86,8 @@
         </style>
     </head>
     <body>
+        <img src="icon.png" />
+        <h1>Netvibes Notifier</h1>
         <div id="wrapper">Loading...</div>
     </body>
 </html>
