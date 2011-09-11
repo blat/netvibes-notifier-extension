@@ -31,7 +31,7 @@ function getDashboards(callback_success, callback_error) {
     $.getJSON(API_URL + '/my/dashboards', function(data) {
         dashboards = new Array();
         $.each(data.dashboards, function(id, dashboard) {
-            if (dashboard.access != 'public' && !dashboard.brand) {
+            if (dashboard.access != 'public' && (!dashboard.brand || dashboard.brand == 'www')) {
                 dashboards.push({
                     id: id,
                     title: dashboard.title,
