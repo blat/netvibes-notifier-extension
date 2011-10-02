@@ -28,19 +28,23 @@ var modules = new Array();
  * @return void
  */
 function getDashboards(callback_success, callback_error) {
-    $.getJSON(API_URL + '/my/dashboards', function(data) {
-        dashboards = new Array();
-        $.each(data.dashboards, function(id, dashboard) {
-            if (dashboard.access != 'public' && (!dashboard.brand || dashboard.brand == 'www')) {
-                dashboards.push({
-                    id: id,
-                    title: dashboard.title,
-                    name: dashboard.name
-                });
-            }
-        });
+    $.getJSON(API_URL + '/my/account', function(data) {
+        username = data.username;
+        $.getJSON(API_URL + '/my/dashboards', function(data) {
+            dashboards = new Array();
+            $.each(data.dashboards, function(id, dashboard) {
+                if (dashboard.access != 'public' && !dashboard.premium && (!dashboard.brand || dashboard.brand == 'www' || dashboard.brand == username)) {
+                    dashboards.push({
+                        id: id,
+                        title: dashboard.title,
+                        name: dashboard.name
+                    });
+                }
+            });
+        })
+        .success(function() { callback_success(); })
+        .error(function() { callback_error(); });
     })
-    .success(function() { callback_success(); })
     .error(function() { callback_error(); });
 }
 
