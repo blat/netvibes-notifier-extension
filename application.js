@@ -1,50 +1,26 @@
 const API_URL    = 'http://www.netvibes.com/api';
-const PW_URL     = 'http://www.netvibes.com/modules/multipleFeeds/providers';
 const HOME_URL   = 'http://www.netvibes.com';
 
 /**
- * List of private and non-branded dashboards.
+ * List of private dashboards.
  */
-var dashboards = new Array();
-
-/**
- * List of feed IDs in the selected dashboard.
- */
-var feeds = new Array();
-
-/**
- * List of module IDs (= secure feeds in the selected dashboard).
- */
-var modules = new Array();
+var dashboards = {};
 
 /**
  * Get list of private dashboards.
- * Skip branded dashboards
- * because we don't know theirs URLs
- * and cookies are not setted on brand.netvibesbusinnes.com
- * and filters don't work on www.netvibes.com,
- * so if tagging is enabled, unread counter is wrong!
  *
  * @return void
  */
 function getDashboards(callback_success, callback_error) {
-    $.getJSON(API_URL + '/my/account', function(data) {
-        username = data.username;
-        $.getJSON(API_URL + '/my/dashboards', function(data) {
-            dashboards = new Array();
-            $.each(data.dashboards, function(id, dashboard) {
-                if (dashboard.access != 'public' && !dashboard.premium && (!dashboard.brand || dashboard.brand == 'www' || dashboard.brand == username)) {
-                    dashboards.push({
-                        id: id,
-                        title: dashboard.title,
-                        name: dashboard.name
-                    });
-                }
-            });
-        })
-        .success(function() { callback_success(); })
-        .error(function() { callback_error(); });
+    $.getJSON(API_URL + '/my/dashboards', function(data) {
+        dashboards = {};
+        $.each(data.dashboards, function(id, dashboard) {
+            if (dashboard.access == 'private' && dashboard.active) {
+                dashboards[id] = dashboard;
+            }
+        });
     })
+    .success(function() { callback_success(); })
     .error(function() { callback_error(); });
 }
 
@@ -56,65 +32,16 @@ function getDashboards(callback_success, callback_error) {
  * @return object
  */
 function getSelectedDashboard() {
-    if (dashboards.length == 0) {
-        return false;
-    }
-    var i = 0;
     if (typeof localStorage['dashboard'] != 'undefined') {
-        $.each(dashboards, function(j, dashboard) {
-            if (dashboard.id == localStorage['dashboard']) {
-                i = j;
+        var current = false;
+        $.each(dashboards, function(id, dashboard) {
+            if (id == localStorage['dashboard']) {
+                current = dashboard;
+                localStorage['dashboard'] = id;
             }
         });
     }
-    var current = dashboards[i];
-    localStorage['dashboard'] = current.id;
     return current;
-}
-
-/**
- * Get feeds identified by:
- * - config URL if multiple feeds (miso or PW)
- * - module ID if url contains a login (= secure feed)
- * - ID when it's possible, else url.
- *
- * @return void
- */
-function getFeeds() {
-    var dashboard = getSelectedDashboard();
-    if (dashboard == false) return;
-    $.getJSON(API_URL + '/my/widgets/' + dashboard.id, function(data) {
-        feeds = new Array();
-        modules = new Array();
-        var urls = new Array();
-        $.each(data.widgets, function(i, widget) {
-            switch (widget.name) {
-                case 'RssReader':
-                    // If there is a login in the URL, it's a secure feed.
-                    // Need the module ID instead of the feed ID.
-                    if (widget.data.feedUrl && widget.data.feedUrl.match(/^https?:\/\/\w+@/)) {
-                        modules.push(widget.id);
-                    } else {
-                        feeds.push(widget.data.feedId);
-                    }
-                    break;
-                case 'MultipleFeeds':
-                    var list = widget.data['list_' + widget.data.category] ? widget.data['list_' + widget.data.category].split(',') : false; // List of selected tabs
-                    $.each(widget.feeds, function(i, feed) {
-                        if (!list || list.indexOf(feed.id.toString()) >= 0) {
-                            feeds.push(feed.feedId);
-                        }
-                    });
-                    break;
-                /* Doesn't work because need to know the base url of premium dashboard
-                case 'SmartTagged':
-                    feeds.push(widget.data.feedId);
-                    break;
-                */
-            }
-        });
-        getUnreadCount();
-    });
 }
 
 /**
@@ -123,22 +50,12 @@ function getFeeds() {
  * @return void
  */
 function getUnreadCount() {
-    if (getSelectedDashboard() == false) {
+    var dashboard = getSelectedDashboard();
+    if (dashboard == false) {
         error();
-    } else if (feeds.length == 0 && modules.length == 0) {
-        updateUnreadCount(0);
     } else {
-        $.getJSON(API_URL + '/feeds/info', {feeds: feeds.join(','), modules: modules.join(',')}, function(data) {
-            var duplicate = false;
-            $.each(data.feeds, function(i, feed) {
-                if (feed.is_duplicate) {
-                    var j = feeds.indexOf(feed.id);
-                    feeds[j] = feed.is_duplicate;
-                    duplicate = true;
-                }
-            });
-            if (duplicate) getUnreadCount();
-            else updateUnreadCount(data.unread_count);
+        $.getJSON(API_URL + '/my/streams/' + dashboard.pageId + '/info', function(data) {
+            updateUnreadCount(data.unread_count);
         });
     }
 }
@@ -166,17 +83,17 @@ function updateUnreadCount(unread_count) {
  * @return void
  */
 function reset() {
-    getDashboards(getFeeds, error);
+    getDashboards(getUnreadCount, error);
 }
 
 /**
  * Refresh data.
- * Only feeds, modules and unread count. Not dashboards.
+ * Only unread count. Not dashboards.
  *
  * @return void
  */
 function refresh() {
-    getFeeds();
+    getUnreadCount();
 }
 
 /**

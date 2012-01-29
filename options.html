@@ -7,11 +7,12 @@
 
             function buildForm() {
                 var wrapper = $('#wrapper').empty().append($('<h3>').text('Select your dashboard:'));
-                $.each(dashboards, function(i, dashboard) {
+                var current = getSelectedDashboard();
+                $.each(dashboards, function(id, dashboard) {
                     wrapper.append(
-                        $('<input>', {type: 'radio', id: 'dashboard-' + dashboard.id, value: dashboard.id, name: 'dashboard', checked: (getSelectedDashboard() != false && dashboard.id == getSelectedDashboard().id ? 'checked' : '')})
+                        $('<input>', {type: 'radio', id: 'dashboard-' + id, value: id, name: 'dashboard', checked: (current != false && id == current.pageId ? 'checked' : '')})
                     ).append(
-                        $('<label>', {for: 'dashboard-' + dashboard.id}).text(dashboard.title)
+                        $('<label>', {for: 'dashboard-' + id}).text(dashboard.title)
                     );
                 });
                 wrapper.append(
