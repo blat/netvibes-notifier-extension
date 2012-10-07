@@ -2,9 +2,16 @@ function buildForm() {
     var wrapper = $('#wrapper').empty().append($('<h3>').text('Select your dashboard:'));
     var current = getSelectedDashboard();
     $.each(dashboards, function(id, dashboard) {
-        wrapper.append(
-            $('<input>', {type: 'radio', id: 'dashboard-' + id, value: id, name: 'dashboard', checked: (current != false && id == current.pageId ? 'checked' : '')})
-        ).append(
+        var input = {
+            type: 'radio',
+            id: 'dashboard-' + id,
+            value: id,
+            name: 'dashboard'
+        };
+        if (current != false && id == current.pageId) {
+            input['checked'] = 'checked';
+        }
+        wrapper.append($('<input>', input)).append(
             $('<label>', {for: 'dashboard-' + id}).text(dashboard.title)
         );
     });
@@ -17,7 +24,7 @@ function saveForm() {
     var button = $('#save-button')
         .attr({disabled: 'disabled'}).text('In progress...');
     localStorage['dashboard'] = $('input[type=radio][name=dashboard]:checked')[0].value;
-    button.attr({disabled: ''}).text('Saved!');
+    button.removeAttr('disabled').text('Saved!');
     refresh();
     return false;
 }
