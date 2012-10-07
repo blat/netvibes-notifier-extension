@@ -1,15 +1,8 @@
 <html>
     <head>
         <title>Netvibes Notifier for Google Chrome</title>
-        <script type="text/javascript" src="http://code.jquery.com/jquery.min.js"></script>
-        <script type="text/javascript" src="application.js"></script>
-        <script type="text/javascript">
-            chrome.browserAction.onClicked.addListener(function() {
-                reset();
-                openTab();
-            });
-            reset();
-            setInterval('refresh()', 2 * 60 * 1000);
-        </script>
+        <script type="text/javascript" src="js/jquery.min.js"></script>
+        <script type="text/javascript" src="js/application.js"></script>
+        <script type="text/javascript" src="js/background.js"></script>
     </head>
 </html>

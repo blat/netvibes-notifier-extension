@@ -1,21 +1,30 @@
 {
     "name": "Netvibes Notifier",
     "version": "0.2.5",
+    "manifest_version": 2,
     "description": "Displays the number of unread items in your Netvibes account.",
     "icons": {
-        "128": "icon.png",
-        "64": "icon.png",
-        "32": "icon.png",
-        "16": "icon.png"
+        "128": "img/icon.png",
+        "64": "img/icon.png",
+        "32": "img/icon.png",
+        "16": "img/icon.png"
     },
-    "background_page": "background.html",
+    "background": {
+        "page": "background.html"
+    },
     "options_page": "options.html",
+    "web_accessible_resources": [
+        "js/jquery.min.js",
+        "js/application.js",
+        "js/background.js",
+        "js/options.js"
+    ],
     "permissions": [
         "tabs",
         "http://*.netvibes.com/"
     ],
     "browser_action": {
         "default_title": "",
-        "default_icon": "disabled.png"
+        "default_icon": "img/disabled.png"
     }
 }

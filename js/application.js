@@ -69,7 +69,7 @@ function getUnreadCount() {
  * @params int unread_count Unread count
  */
 function updateUnreadCount(unread_count) {
-    var icon = (parseInt(unread_count) > 0) ? 'icon.png' : 'disabled.png';
+    var icon = 'img/' + (parseInt(unread_count) > 0 ? 'icon.png' : 'disabled.png');
     if (unread_count == 0) {
         unread_count = '';
     }
@@ -128,7 +128,7 @@ function openTab() {
  * @return void
  */
 function error() {
-    var icon = 'disabled.png';
+    var icon = 'img/disabled.png';
     chrome.browserAction.setBadgeText({text: '?'});
     chrome.browserAction.setIcon({path: icon});
 }

@@ -1,46 +1,9 @@
 <html>
     <head>
         <title>Netvibes Notifier for Google Chrome</title>
-        <script type="text/javascript" src="http://code.jquery.com/jquery.min.js"></script>
-        <script type="text/javascript" src="application.js"></script>
-        <script type="text/javascript">
-
-            function buildForm() {
-                var wrapper = $('#wrapper').empty().append($('<h3>').text('Select your dashboard:'));
-                var current = getSelectedDashboard();
-                $.each(dashboards, function(id, dashboard) {
-                    wrapper.append(
-                        $('<input>', {type: 'radio', id: 'dashboard-' + id, value: id, name: 'dashboard', checked: (current != false && id == current.pageId ? 'checked' : '')})
-                    ).append(
-                        $('<label>', {for: 'dashboard-' + id}).text(dashboard.title)
-                    );
-                });
-                wrapper.append(
-                    $('<button>', {id: 'save-button'}).text('Save').click(saveForm)
-                );
-            }
-
-            function saveForm() {
-                var button = $('#save-button')
-                    .attr({disabled: 'disabled'}).text('In progress...');
-                localStorage['dashboard'] = $('input[type=radio][name=dashboard]:checked')[0].value;
-                button.attr({disabled: ''}).text('Saved!');
-                refresh();
-                return false;
-            }
-
-            function signIn() {
-                $('#wrapper').empty().append($('<p>').html('<strong>Error:</strong> You have to <a href="' + HOME_URL + '/signin">sign-in</a> before.'));
-            }
-
-            function init() {
-                getDashboards(buildForm, signIn);
-            }
-
-            $(function() {
-                init();
-            });
-        </script>
+        <script type="text/javascript" src="js/jquery.min.js"></script>
+        <script type="text/javascript" src="js/application.js"></script>
+        <script type="text/javascript" src="js/options.js"></script>
         <style>
             body {
                 font-family: arial, sans-serif;
@@ -87,7 +50,7 @@
         </style>
     </head>
     <body>
-        <img src="icon.png" />
+        <img src="img/icon.png" />
         <h1>Netvibes Notifier</h1>
         <div id="wrapper">Loading...</div>
     </body>
