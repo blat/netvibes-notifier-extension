@@ -32,8 +32,8 @@ function getDashboards(callback_success, callback_error) {
  * @return object
  */
 function getSelectedDashboard() {
+    var current = false;
     if (typeof localStorage['dashboard'] != 'undefined') {
-        var current = false;
         $.each(dashboards, function(id, dashboard) {
             if (id == localStorage['dashboard']) {
                 current = dashboard;
