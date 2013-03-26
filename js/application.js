@@ -15,7 +15,7 @@ function getDashboards(callback_success, callback_error) {
     $.getJSON(API_URL + '/my/dashboards', function(data) {
         dashboards = {};
         $.each(data.dashboards, function(id, dashboard) {
-            if (parseInt(dashboard.active)) {
+            if (typeof(dashboard.active) == 'undefined' || parseInt(dashboard.active)) {
                 dashboards[id] = dashboard;
             }
         });
