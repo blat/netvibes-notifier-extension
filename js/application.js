@@ -5,6 +5,7 @@ const HOME_URL   = 'http://www.netvibes.com';
  * List of private dashboards.
  */
 var dashboards = {};
+var streamIds = [];
 
 /**
  * Get list of private dashboards.
@@ -45,6 +46,32 @@ function getSelectedDashboard() {
 }
 
 /**
+ * Get list of streams.
+ *
+ * @return void
+ */
+function getStreams() {
+    var dashboard = getSelectedDashboard();
+    if (dashboard == false) {
+        error();
+    } else {
+        $.getJSON(API_URL + '/my/dashboards/data', {pageId: dashboard.pageId}, function(data) {
+            streamIds = [];
+            $.each(data.userData.modules, function(id, module) {
+                if (typeof(module.streams) != 'undefined') {
+                    $.each(module.streams, function(id, stream) {
+                        streamIds.push({
+                            id: stream.id
+                        });
+                    });
+                }
+            });
+            getUnreadCount();
+        });
+    }
+}
+
+/**
  * Get unread count from list of feed IDs and/or module IDs.
  *
  * @return void
@@ -54,8 +81,20 @@ function getUnreadCount() {
     if (dashboard == false) {
         error();
     } else {
-        $.getJSON(API_URL + '/my/streams/' + dashboard.pageId + '/info', function(data) {
-            updateUnreadCount(data.unread_count);
+        $.getJSON(API_URL + '/streams', {
+            actions: JSON.stringify([{
+                options: {limit: 0},
+                streams: streamIds
+            }]),
+            pageId: dashboard.pageId
+        }, function(data) {
+            var count = 0;
+            $.each(data.results[0].streams, function(id, stream) {
+                if (typeof(stream.flags) != 'undefined') {
+                    count += stream.flags.unread;
+                }
+            });
+            updateUnreadCount(count);
         });
     }
 }
@@ -73,7 +112,7 @@ function updateUnreadCount(unread_count) {
     if (unread_count == 0) {
         unread_count = '';
     }
-    chrome.browserAction.setBadgeText({text: unread_count.toString()});
+    chrome.browserAction.setBadgeText({text: unread_count > 1000 ? '1K+' : unread_count.toString()});
     chrome.browserAction.setIcon({path: icon});
 }
 
@@ -83,7 +122,7 @@ function updateUnreadCount(unread_count) {
  * @return void
  */
 function reset() {
-    getDashboards(getUnreadCount, error);
+    getDashboards(getStreams, error);
 }
 
 /**
