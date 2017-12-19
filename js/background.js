@@ -1,6 +1,9 @@
 chrome.browserAction.onClicked.addListener(function() {
-    reset();
-    openTab();
+    reset().then(function() {
+        openTab();
+    });
 });
 reset();
-setInterval(function() { refresh(); }, 2 * 60 * 1000);
+setInterval(function() {
+    refresh();
+}, 120 * 1000);

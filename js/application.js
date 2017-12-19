@@ -1,10 +1,17 @@
-const API_URL    = 'http://www.netvibes.com/api';
-const HOME_URL   = 'http://www.netvibes.com';
+const HOME_URL   = 'https://www.netvibes.com';
+const API_URL    = HOME_URL + '/api';
+
+/**
+ * Support for Chrome
+ */
+if (typeof browser == 'undefined') {
+    browser = chrome;
+}
 
 /**
  * List of private dashboards.
  */
-var dashboards = {};
+var dashboards = [];
 var streamIds = [];
 
 /**
@@ -12,17 +19,24 @@ var streamIds = [];
  *
  * @return void
  */
-function getDashboards(callback_success, callback_error) {
-    $.getJSON(API_URL + '/my/dashboards', function(data) {
-        dashboards = {};
-        $.each(data.dashboards, function(id, dashboard) {
-            if (typeof(dashboard.active) == 'undefined' || parseInt(dashboard.active)) {
-                dashboards[id] = dashboard;
-            }
-        });
+function getDashboards() {
+    return fetch(API_URL + '/dashboards/bootstrap', {
+        credentials: 'include',
+        method: 'POST',
     })
-    .success(function() { callback_success(); })
-    .error(function() { callback_error(); });
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+        if (data.error || !data.bootstrap.App.User) {
+            dashboards = [];
+            return false;
+        } else {
+            dashboards = data.bootstrap.App.User.listOfPages;
+            if (typeof localStorage['dashboard'] == 'undefined') {
+                localStorage['dashboard'] = data.bootstrap.App.User.preferences.openPages;
+            }
+            return true;
+        }
+    });
 }
 
 /**
@@ -35,12 +49,13 @@ function getDashboards(callback_success, callback_error) {
 function getSelectedDashboard() {
     var current = false;
     if (typeof localStorage['dashboard'] != 'undefined') {
-        $.each(dashboards, function(id, dashboard) {
-            if (id == localStorage['dashboard']) {
+        for (var i = 0; i < dashboards.length; i++) {
+            var dashboard = dashboards[i];
+            if (dashboard.pageId == localStorage['dashboard']) {
                 current = dashboard;
-                localStorage['dashboard'] = id;
+                localStorage['dashboard'] = dashboard.pageId;
             }
-        });
+        }
     }
     return current;
 }
@@ -55,17 +70,22 @@ function getStreams() {
     if (dashboard == false) {
         error();
     } else {
-        $.getJSON(API_URL + '/my/dashboards/data', {pageId: dashboard.pageId}, function(data) {
+        fetch(API_URL + '/my/dashboards/data?pageId=' + dashboard.pageId, {
+            credentials: 'include',
+            method: 'POST',
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
             streamIds = [];
-            $.each(data.userData.modules, function(id, module) {
+            var modules = data.userData.modules;
+            for (var i = 0; i < modules.length; i++) {
+                var module = modules[i];
                 if (typeof(module.streams) != 'undefined') {
-                    $.each(module.streams, function(id, stream) {
-                        streamIds.push({
-                            id: stream.id
-                        });
-                    });
+                    for (var j = 0; j < module.streams.length; j++) {
+                        streamIds.push(module.streams[j]);
+                    }
                 }
-            });
+            }
             getUnreadCount();
         });
     }
@@ -81,19 +101,27 @@ function getUnreadCount() {
     if (dashboard == false) {
         error();
     } else {
-        $.getJSON(API_URL + '/streams', {
-            actions: JSON.stringify([{
+        fetch(API_URL + '/streams?pageId=' + dashboard.pageId, {
+            credentials: 'include',
+            method: 'POST',
+            body: JSON.stringify({
                 options: {limit: 0},
                 streams: streamIds
-            }]),
-            pageId: dashboard.pageId
-        }, function(data) {
+            }),
+            headers: {
+                'Content-type': 'application/json'
+            },
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data){
             var count = 0;
-            $.each(data.results[0].streams, function(id, stream) {
+            var streams = data.results.streams;
+            for (var i = 0; i < streams.length; i++) {
+                var stream = streams[i];
                 if (typeof(stream.flags) != 'undefined') {
                     count += stream.flags.unread;
                 }
-            });
+            }
             updateUnreadCount(count);
         });
     }
@@ -105,15 +133,15 @@ function getUnreadCount() {
  * we set black&white icon,
  * else classic Netvibes icon.
  *
- * @params int unread_count Unread count
+ * @param int unread_count Unread count
  */
 function updateUnreadCount(unread_count) {
-    var icon = 'img/' + (parseInt(unread_count) > 0 ? 'icon.png' : 'disabled.png');
+    var icon = 'img/' + (parseInt(unread_count) > 0 ? 'icon' : 'disabled') + '_64.png';
     if (unread_count == 0) {
         unread_count = '';
     }
-    chrome.browserAction.setBadgeText({text: unread_count > 1000 ? '1K+' : unread_count.toString()});
-    chrome.browserAction.setIcon({path: icon});
+    browser.browserAction.setBadgeText({text: unread_count > 1000 ? '1K+' : unread_count.toString()});
+    browser.browserAction.setIcon({path: icon});
 }
 
 /**
@@ -122,7 +150,13 @@ function updateUnreadCount(unread_count) {
  * @return void
  */
 function reset() {
-    getDashboards(getStreams, error);
+    return getDashboards().then(function(res) {
+        if (res) {
+            getStreams();
+        } else {
+            error();
+        }
+    });
 }
 
 /**
@@ -144,20 +178,21 @@ function refresh() {
  */
 function openTab() {
     var dashboard = getSelectedDashboard();
-    var url = HOME_URL + ((dashboard == false) ? '/signin' : '/privatepage/' + dashboard.name);
-    chrome.tabs.getAllInWindow(null, function(tabs) {
+    var url =  (dashboard == false) ? '/options.html' : HOME_URL + '/dashboard/' + dashboard.name;
+    browser.tabs.query({currentWindow: true}, function(tabs) {
         var founded = false;
-        $.each(tabs, function(i, tab) {
-            if (!founded && tab.url.match('http://www.netvibes.com/([a-z]{2}$|signin|signup|privatepage/' + (dashboard.name || '')+ ')')) {
+        for (i = 0; i < tabs.length; i++) {
+            var tab = tabs[i];
+            if (!founded && tab.url.match(HOME_URL + '/([a-z]{2}$|signin|signup|dashboard/' + (dashboard.name || '')+ ')')) {
                 founded = true;
-                var data = {selected: true };
+                var data = {active: true };
                 if (!tab.url.match('^' + url)) {
                     data.url = url;
                 }
-                chrome.tabs.update(tab.id, data);
+                browser.tabs.update(tab.id, data);
             }
-        });
-        if (!founded) chrome.tabs.create({selected: true, url: url});
+        }
+        if (!founded) browser.tabs.create({active: true, url: url});
     });
 }
 
@@ -168,7 +203,6 @@ function openTab() {
  */
 function error() {
     var icon = 'img/disabled.png';
-    chrome.browserAction.setBadgeText({text: '?'});
-    chrome.browserAction.setIcon({path: icon});
+    browser.browserAction.setBadgeText({text: '?'});
+    browser.browserAction.setIcon({path: icon});
 }
-
